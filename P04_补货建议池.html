@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>补货建议池 - P04</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#6C9BCA',
+            'primary-hover': '#5A8AB9',
+            'primary-light': '#E8F1F8',
+            accent: '#F9A633',
+            'accent-hover': '#E09520',
+            success: '#53B886',
+            warning: '#F9A633',
+            danger: '#C45C4A',
+            info: '#6C9BCA',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: linear-gradient(180deg, #f8fafc 0%, #f0f7fc 100%);
+      min-height: 100vh;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+    }
+    .stat-card {
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+    }
+    .tab-item {
+      padding: 10px 16px;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .tab-item:hover {
+      color: #6C9BCA;
+    }
+    .tab-item.active {
+      color: #6C9BCA;
+      border-bottom-color: #6C9BCA;
+      font-weight: 500;
+    }
+    .tag {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .tag-high {
+      background: #FCE8E5;
+      color: #C45C4A;
+    }
+    .tag-medium {
+      background: #FEF5E7;
+      color: #C17A28;
+    }
+    .tag-low {
+      background: #E8F5EE;
+      color: #53B886;
+    }
+    .tag-transfer {
+      background: #E8F1F8;
+      color: #6C9BCA;
+    }
+    .tag-purchase {
+      background: #FEF5E7;
+      color: #C17A28;
+    }
+    .credibility-low {
+      background: #FCE8E5;
+      color: #C45C4A;
+    }
+    .credibility-medium {
+      background: #FEF5E7;
+      color: #C17A28;
+    }
+    .credibility-high {
+      background: #E8F5EE;
+      color: #53B886;
+    }
+    .table-row {
+      transition: background 0.15s;
+    }
+    .table-row:hover {
+      background: #F9FAFB;
+    }
+    .table-row.low-credibility {
+      background: #FEF2F2;
+    }
+    .drawer {
+      position: fixed;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 400px;
+      background: white;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+      z-index: 100;
+      transform: translateX(100%);
+      transition: transform 0.3s;
+    }
+    .drawer.open {
+      transform: translateX(0);
+    }
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.3);
+      z-index: 99;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    // Mock数据
+    const mockData = {
+      stats: {
+        todayNew: 128,
+        highRisk: 23,
+        lowCredibility: 9,
+        pendingApproval: 41,
+        transferPriority: 17,
+      },
+      tabs: [
+        { key: 'all', label: '全部', count: 128 },
+        { key: 'pending', label: '待确认', count: 56 },
+        { key: 'highRisk', label: '高风险', count: 23 },
+        { key: 'lowCredibility', label: '低可信库存', count: 9 },
+        { key: 'transfer', label: '调拨优先', count: 17 },
+        { key: 'purchase', label: '采购优先', count: 34 },
+        { key: 'activity', label: '活动影响', count: 12 },
+      ],
+      suggestions: [
+        { 
+          id: 'SG-20260408-001', 
+          node: '兰州一区门店A', 
+          supply: '兰州一区区域仓', 
+          type: 'transfer', 
+          risk: 'high', 
+          credibility: 'low',
+          quantity: 240, 
+          strategy: '兰州一区饮料策略-V2',
+          createdAt: '2026-04-08 10:30',
+          tags: ['高缺货风险', '低可信库存']
+        },
+        { 
+          id: 'SG-20260408-002', 
+          node: '兰州一区门店B', 
+          supply: '外部供应商', 
+          type: 'purchase', 
+          risk: 'high', 
+          credibility: 'medium',
+          quantity: 180, 
+          strategy: '碳酸饮料品类策略-V1',
+          createdAt: '2026-04-08 09:15',
+          tags: ['交期异常']
+        },
+        { 
+          id: 'SG-20260408-003', 
+          node: '兰州二区门店C', 
+          supply: '兰州二区区域仓', 
+          type: 'transfer', 
+          risk: 'medium', 
+          credibility: 'high',
+          quantity: 120, 
+          strategy: '兰州二区饮料策略-V1',
+          createdAt: '2026-04-08 08:45',
+          tags: ['活动影响']
+        },
+        { 
+          id: 'SG-20260408-004', 
+          node: '西宁区域仓', 
+          supply: '外部供应商', 
+          type: 'purchase', 
+          risk: 'low', 
+          credibility: 'high',
+          quantity: 500, 
+          strategy: '西宁区域策略-V3',
+          createdAt: '2026-04-08 07:30',
+          tags: []
+        },
+        { 
+          id: 'SG-20260408-005', 
+          node: '兰州一区门店D', 
+          supply: '兰州一区区域仓', 
+          type: 'transfer', 
+          risk: 'medium', 
+          credibility: 'low',
+          quantity: 96, 
+          strategy: '兰州一区饮料策略-V2',
+          createdAt: '2026-04-08 06:00',
+          tags: ['低可信库存']
+        },
+      ]
+    };
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('all');
+      const [selectedRows, setSelectedRows] = useState([]);
+      const [drawerOpen, setDrawerOpen] = useState(false);
+      const [selectedItem, setSelectedItem] = useState(null);
+
+      const toggleRow = (id) => {
+        if (selectedRows.includes(id)) {
+          setSelectedRows(selectedRows.filter(row => row !== id));
+        } else {
+          setSelectedRows([...selectedRows, id]);
+        }
+      };
+
+      const openDrawer = (item) => {
+        setSelectedItem(item);
+        setDrawerOpen(true);
+      };
+
+      return (
+        <div className="min-h-screen pb-8">
+          {/* 顶部信息区 */}
+          <div className="bg-white border-b border-gray-200 sticky top-0 z-50">
+            <div className="max-w-[1600px] mx-auto px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+                    <i className="fas fa-list text-white"></i>
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-semibold text-gray-900">补货建议池</h1>
+                    <p className="text-sm text-gray-500">数据更新至 2026-04-08 14:30</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                    <i className="fas fa-sync-alt mr-2"></i>刷新建议
+                  </button>
+                  <button className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                    <i className="fas fa-download mr-2"></i>导出
+                  </button>
+                  <button className="px-4 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-hover">
+                    <i className="fas fa-check-double mr-2"></i>批量提交审批
+                  </button>
+                </div>
+              </div>
+
+              {/* 统计卡片区 */}
+              <div className="grid grid-cols-5 gap-4 mt-4">
+                <div className="stat-card card p-4 text-center">
+                  <div className="text-2xl font-bold text-gray-900">{mockData.stats.todayNew}</div>
+                  <div className="text-xs text-gray-500 mt-1">今日新增</div>
+                </div>
+                <div className="stat-card card p-4 text-center border-l-4 border-danger">
+                  <div className="text-2xl font-bold text-danger">{mockData.stats.highRisk}</div>
+                  <div className="text-xs text-gray-500 mt-1">高风险</div>
+                </div>
+                <div className="stat-card card p-4 text-center border-l-4 border-accent">
+                  <div className="text-2xl font-bold text-accent">{mockData.stats.lowCredibility}</div>
+                  <div className="text-xs text-gray-500 mt-1">低可信库存</div>
+                </div>
+                <div className="stat-card card p-4 text-center">
+                  <div className="text-2xl font-bold text-primary">{mockData.stats.pendingApproval}</div>
+                  <div className="text-xs text-gray-500 mt-1">待审批</div>
+                </div>
+                <div className="stat-card card p-4 text-center">
+                  <div className="text-2xl font-bold text-success">{mockData.stats.transferPriority}</div>
+                  <div className="text-xs text-gray-500 mt-1">可优先调拨</div>
+                </div>
+              </div>
+
+              {/* Tab导航 */}
+              <div className="flex items-center gap-1 mt-4 border-b border-gray-200 overflow-x-auto">
+                {mockData.tabs.map(tab => (
+                  <div 
+                    key={tab.key}
+                    className={`tab-item ${activeTab === tab.key ? 'active' : 'text-gray-600'}`}
+                    onClick={() => setActiveTab(tab.key)}
+                  >
+                    {tab.label}
+                    <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs ${activeTab === tab.key ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-500'}`}>
+                      {tab.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* 筛选区 */}
+              <div className="flex items-center gap-4 mt-4 py-3 border-t border-gray-100">
+                <select className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary">
+                  <option>全部区域仓</option>
+                  <option>兰州一区区域仓</option>
+                  <option>兰州二区区域仓</option>
+                  <option>西宁区域仓</option>
+                </select>
+                <select className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary">
+                  <option>全部门店分组</option>
+                  <option>核心门店</option>
+                  <option>普通门店</option>
+                </select>
+                <select className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary">
+                  <option>全部品类</option>
+                  <option>碳酸饮料</option>
+                  <option>果汁饮料</option>
+                </select>
+                <select className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary">
+                  <option>全部风险等级</option>
+                  <option>高风险</option>
+                  <option>中风险</option>
+                  <option>低风险</option>
+                </select>
+                <button className="ml-auto text-sm text-primary hover:underline">
+                  <i className="fas fa-sliders-h mr-1"></i>高级筛选
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 主内容区 */}
+          <div className="max-w-[1600px] mx-auto px-6 py-6">
+            {/* 列表区 */}
+            <div className="card overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left">
+                      <input type="checkbox" className="rounded border-gray-300" />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">建议单号</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">需求节点</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">供给建议</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">类型</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">风险</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">可信度</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">建议量</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">来源策略</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {mockData.suggestions.map(item => (
+                    <tr key={item.id} className={`table-row ${item.credibility === 'low' ? 'low-credibility' : ''}`}>
+                      <td className="px-4 py-3">
+                        <input 
+                          type="checkbox" 
+                          className="rounded border-gray-300"
+                          checked={selectedRows.includes(item.id)}
+                          onChange={() => toggleRow(item.id)}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.id}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{item.node}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{item.supply}</td>
+                      <td className="px-4 py-3">
+                        <span className={`tag ${item.type === 'transfer' ? 'tag-transfer' : 'tag-purchase'}`}>
+                          {item.type === 'transfer' ? '调拨' : '采购'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`tag tag-${item.risk}`}>
+                          {item.risk === 'high' ? '高' : item.risk === 'medium' ? '中' : '低'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`tag credibility-${item.credibility}`}>
+                          {item.credibility === 'high' ? '高' : item.credibility === 'medium' ? '中' : '低'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-semibold text-gray-900">{item.quantity}件</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{item.strategy}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button 
+                            className="text-xs text-primary hover:underline"
+                            onClick={() => openDrawer(item)}
+                          >
+                            预览
+                          </button>
+                          <button className="text-xs text-primary hover:underline">详情</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 分页 */}
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-gray-500">
+                共 128 条，每页 20 条
+              </div>
+              <div className="flex items-center gap-2">
+                <button className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  上一页
+                </button>
+                <button className="px-3 py-1.5 text-sm text-white bg-primary rounded-lg">1</button>
+                <button className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">2</button>
+                <button className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">3</button>
+                <span className="text-gray-400">...</span>
+                <button className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">7</button>
+                <button className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  下一页
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 底部批量操作栏 */}
+          {selectedRows.length > 0 && (
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-4 z-50">
+              <div className="max-w-[1600px] mx-auto flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-600">
+                    已选 <span className="font-semibold text-primary">{selectedRows.length}</span> 条
+                  </span>
+                  <button className="text-sm text-gray-500 hover:text-gray-700" onClick={() => setSelectedRows([])}>
+                    取消选择
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button className="px-4 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-hover">
+                    批量提交审批
+                  </button>
+                  <button className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                    批量忽略
+                  </button>
+                  <button className="px-4 py-2 text-sm text-accent bg-[#FEF5E7] rounded-lg hover:bg-[#FCE8D0]">
+                    批量标记人工复核
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 遮罩层 */}
+          <div className={`backdrop ${drawerOpen ? 'open' : ''}`} onClick={() => setDrawerOpen(false)}></div>
+
+          {/* 右侧快捷预览抽屉 */}
+          <div className={`drawer ${drawerOpen ? 'open' : ''}`}>
+            {selectedItem && (
+              <div className="h-full flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <h3 className="font-semibold text-gray-900">建议预览</h3>
+                  <button onClick={() => setDrawerOpen(false)} className="text-gray-400 hover:text-gray-600">
+                    <i className="fas fa-times"></i>
+                  </button>
+                </div>
+                <div className="flex-1 overflow-auto p-4">
+                  <div className="space-y-4">
+                    <div className="p-4 bg-primary-light rounded-xl">
+                      <div className="text-sm text-gray-600">建议单号</div>
+                      <div className="text-lg font-semibold text-gray-900">{selectedItem.id}</div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-xs text-gray-500">需求节点</div>
+                        <div className="text-sm font-medium text-gray-900">{selectedItem.node}</div>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-xs text-gray-500">供给来源</div>
+                        <div className="text-sm font-medium text-gray-900">{selectedItem.supply}</div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-[#E8F5EE] rounded-xl">
+                      <div className="text-sm text-gray-600">建议补货量</div>
+                      <div className="text-3xl font-bold text-success">{selectedItem.quantity} <span className="text-base font-normal">件</span></div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-gray-900">当前库存摘要</h4>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <div className="text-lg font-semibold text-gray-900">120</div>
+                          <div className="text-xs text-gray-500">可用库存</div>
+                        </div>
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <div className="text-lg font-semibold text-gray-900">80</div>
+                          <div className="text-xs text-gray-500">在途库存</div>
+                        </div>
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <div className="text-lg font-semibold text-gray-900">2.5</div>
+                          <div className="text-xs text-gray-500">可销天数</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-gray-900">风险标签</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedItem.tags.length > 0 ? selectedItem.tags.map((tag, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-accent text-white text-xs rounded">{tag}</span>
+                        )) : <span className="text-sm text-gray-400">无特殊标签</span>}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-gray-900">来源策略</h4>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-sm text-gray-900">{selectedItem.strategy}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 border-t border-gray-200 space-y-2">
+                  <button className="w-full py-2.5 text-sm text-white bg-primary rounded-lg hover:bg-primary-hover">
+                    进入详情页
+                  </button>
+                  <div className="flex gap-2">
+                    <button className="flex-1 py-2 text-sm text-accent bg-[#FEF5E7] rounded-lg hover:bg-[#FCE8D0]">
+                      标记复核
+                    </button>
+                    <button className="flex-1 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                      快速忽略
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

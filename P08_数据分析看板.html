@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据分析看板 - P08</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#6C9BCA',
+            'primary-hover': '#5A8AB9',
+            'primary-light': '#E8F1F8',
+            accent: '#F9A633',
+            'accent-hover': '#E09520',
+            success: '#53B886',
+            warning: '#F9A633',
+            danger: '#C45C4A',
+            info: '#6C9BCA',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: linear-gradient(180deg, #f8fafc 0%, #f0f7fc 100%);
+      min-height: 100vh;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+    }
+    .metric-card {
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .metric-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+    }
+    .metric-value {
+      font-size: 36px;
+      font-weight: 700;
+    }
+    .trend-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .trend-up {
+      background: #E8F5EE;
+      color: #53B886;
+    }
+    .trend-down {
+      background: #FCE8E5;
+      color: #C45C4A;
+    }
+    .chart-container {
+      position: relative;
+      height: 250px;
+    }
+    .funnel-bar {
+      height: 32px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      position: relative;
+    }
+    .funnel-label {
+      position: absolute;
+      left: -80px;
+      width: 70px;
+      text-align: right;
+      font-size: 12px;
+      color: #6B7280;
+    }
+    .funnel-count {
+      position: absolute;
+      right: -60px;
+      width: 50px;
+      text-align: left;
+      font-size: 12px;
+      color: #6B7280;
+    }
+    .rank-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid #F3F4F6;
+      transition: background 0.15s;
+    }
+    .rank-item:hover {
+      background: #F9FAFB;
+    }
+    .rank-item:last-child {
+      border-bottom: none;
+    }
+    .rank-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .rank-num.top {
+      background: #FCE8E5;
+      color: #C45C4A;
+    }
+    .rank-num.normal {
+      background: #F3F4F6;
+      color: #6B7280;
+    }
+    .period-btn {
+      padding: 6px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .period-btn:hover {
+      background: #F3F4F6;
+    }
+    .period-btn.active {
+      background: #E8F1F8;
+      color: #6C9BCA;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Mock数据
+    const mockData = {
+      metrics: {
+        stockoutRate: { value: 3.2, target: 5.0, change: -2.0 },
+        turnoverDays: { value: 12.5, target: 15.0, change: -1.2 },
+        adoptionRate: { value: 85, target: 80, change: 5 },
+        manualRate: { value: 18, target: 25, change: -3 },
+        transferRatio: { value: 42, target: 35, change: 7 },
+      },
+      trendData: {
+        labels: ['03-25', '03-26', '03-27', '03-28', '03-29', '03-30', '03-31', '04-01', '04-02', '04-03', '04-04', '04-05', '04-06', '04-07'],
+        stockoutRate: [5.2, 5.0, 4.8, 4.5, 4.2, 4.0, 3.8, 3.6, 3.5, 3.4, 3.3, 3.2, 3.2, 3.2],
+        turnoverDays: [14.2, 14.0, 13.8, 13.5, 13.2, 13.0, 12.8, 12.7, 12.6, 12.5, 12.5, 12.5, 12.5, 12.5],
+        adoptionRate: [75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 84, 85, 85, 85],
+        lowCredibility: [12, 11, 11, 10, 9, 9, 8, 7, 6, 6, 5, 5, 5, 5],
+      },
+      strategyComparison: [
+        { name: '兰州一区饮料策略-V2', adoption: 88, correction: 12, improvement: -2.5 },
+        { name: '兰州二区饮料策略-V1', adoption: 82, correction: 18, improvement: -1.8 },
+        { name: '西宁区域策略-V3', adoption: 79, correction: 21, improvement: -1.2 },
+        { name: '碳酸饮料品类策略-V1', adoption: 91, correction: 9, improvement: -3.1 },
+      ],
+      funnelData: [
+        { stage: '已生成', count: 128, rate: 100 },
+        { stage: '已确认', count: 108, rate: 84 },
+        { stage: '已审批', count: 96, rate: 75 },
+        { stage: '已执行', count: 89, rate: 70 },
+        { stage: '已完成回写', count: 82, rate: 64 },
+      ],
+      topRiskSKU: [
+        { sku: 'SKU-001 可乐500ml', node: '兰州一区门店A', risk: '高缺货+低可信', trend: '上升' },
+        { sku: 'SKU-002 雪碧500ml', node: '兰州一区门店B', risk: '交期异常', trend: '持平' },
+        { sku: 'SKU-003 芬达500ml', node: '兰州二区门店C', risk: '销量突增', trend: '下降' },
+        { sku: 'SKU-004 脉动600ml', node: '西宁区域仓', risk: '调拨失败', trend: '上升' },
+        { sku: 'SKU-005 美年达500ml', node: '兰州一区门店D', risk: '低可信库存', trend: '持平' },
+      ],
+      lowEfficiencyStrategy: [
+        { name: '兰州二区饮料策略-V1', adoption: 62, correction: 38 },
+        { name: '西宁区域策略-V2', adoption: 58, correction: 42 },
+        { name: '果汁饮料品类策略-V1', adoption: 65, correction: 35 },
+      ],
+      topUnadopted: [
+        { id: 'SG-20260401-015', reason: '建议量过大', strategy: '兰州二区饮料策略-V1' },
+        { id: 'SG-20260402-023', reason: '库存已充足', strategy: '西宁区域策略-V3' },
+        { id: 'SG-20260403-008', reason: '活动已结束', strategy: '碳酸饮料品类策略-V1' },
+      ],
+    };
+
+    // 简单的趋势图表组件
+    function SimpleChart({ data, color, labels }) {
+      const canvasRef = useRef(null);
+      
+      useEffect(() => {
+        if (!canvasRef.current) return;
+        
+        const ctx = canvasRef.current.getContext('2d');
+        const width = canvasRef.current.width = canvasRef.current.offsetWidth;
+        const height = canvasRef.current.height = canvasRef.current.offsetHeight;
+        
+        // 清空画布
+        ctx.clearRect(0, 0, width, height);
+        
+        // 绘制折线
+        const max = Math.max(...data);
+        const min = Math.min(...data);
+        const range = max - min || 1;
+        
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        
+        data.forEach((val, i) => {
+          const x = (i / (data.length - 1)) * (width - 40) + 20;
+          const y = height - 30 - ((val - min) / range) * (height - 50);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        
+        // 绘制填充
+        ctx.lineTo(width - 20, height - 30);
+        ctx.lineTo(20, height - 30);
+        ctx.closePath();
+        const gradient = ctx.createLinearGradient(0, 0, 0, height);
+        gradient.addColorStop(0, color + '40');
+        gradient.addColorStop(1, color + '00');
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        
+      }, [data, color]);
+      
+      return <canvas ref={canvasRef} className="w-full h-full" />;
+    }
+
+    function App() {
+      const [period, setPeriod] = useState('30d');
+      const [filters, setFilters] = useState({
+        warehouse: '全部区域仓',
+        category: '全部品类',
+      });
+
+      const MetricCard = ({ title, value, target, change, unit, color }) => (
+        <div className="metric-card card p-5">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-sm text-gray-500">{title}</div>
+              <div className={`metric-value mt-2 ${color === 'success' ? 'text-success' : color === 'danger' ? 'text-danger' : color === 'accent' ? 'text-accent' : 'text-primary'}`}>
+                {value}{unit}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`trend-badge ${change > 0 ? 'trend-up' : 'trend-down'}`}>
+                  <i className={`fas fa-arrow-${change > 0 ? 'up' : 'down'} mr-1`}></i>
+                  {Math.abs(change)}{unit === '%' ? '%' : ''}
+                </span>
+                <span className="text-xs text-gray-400">目标: {target}{unit}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="min-h-screen pb-8">
+          {/* 顶部信息区 */}
+          <div className="bg-white border-b border-gray-200 sticky top-0 z-50">
+            <div className="max-w-[1600px] mx-auto px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-[#8B9DC3] flex items-center justify-center">
+                    <i className="fas fa-chart-bar text-white"></i>
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-semibold text-gray-900">数据分析看板</h1>
+                    <p className="text-sm text-gray-500">数据更新至 2026-04-08 14:30</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                    <i className="fas fa-sync-alt mr-2"></i>刷新
+                  </button>
+                  <button className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                    <i className="fas fa-download mr-2"></i>导出分析
+                  </button>
+                  <button className="px-4 py-2 text-sm text-primary bg-primary-light rounded-lg hover:bg-[#D6E5F2]">
+                    <i className="fas fa-bookmark mr-2"></i>保存视图
+                  </button>
+                </div>
+              </div>
+
+              {/* 分析周期选择 */}
+              <div className="flex items-center gap-2 mt-4">
+                <span className="text-sm text-gray-500 mr-2">分析周期:</span>
+                {['7d', '30d', 'month', 'custom'].map(p => (
+                  <button
+                    key={p}
+                    className={`period-btn ${period === p ? 'active' : 'text-gray-600'}`}
+                    onClick={() => setPeriod(p)}
+                  >
+                    {p === '7d' ? '近7天' : p === '30d' ? '近30天' : p === 'month' ? '本月' : '自定义'}
+                  </button>
+                ))}
+              </div>
+
+              {/* 筛选区 */}
+              <div className="flex items-center gap-4 mt-4 py-3 border-t border-gray-100">
+                <select 
+                  className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary"
+                  value={filters.warehouse}
+                  onChange={(e) => setFilters({...filters, warehouse: e.target.value})}
+                >
+                  <option>全部区域仓</option>
+                  <option>兰州一区区域仓</option>
+                  <option>兰州二区区域仓</option>
+                  <option>西宁区域仓</option>
+                </select>
+                <select 
+                  className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary"
+                  value={filters.category}
+                  onChange={(e) => setFilters({...filters, category: e.target.value})}
+                >
+                  <option>全部品类</option>
+                  <option>碳酸饮料</option>
+                  <option>果汁饮料</option>
+                  <option>茶饮料</option>
+                </select>
+                <select className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary">
+                  <option>全部策略类型</option>
+                  <option>仓库策略</option>
+                  <option>品类策略</option>
+                  <option>SKU策略</option>
+                </select>
+                <button className="ml-auto text-sm text-primary hover:underline">
+                  <i className="fas fa-sliders-h mr-1"></i>高级筛选
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 主内容区 */}
+          <div className="max-w-[1600px] mx-auto px-6 py-6">
+            {/* 核心指标卡 */}
+            <div className="grid grid-cols-5 gap-4 mb-6">
+              <MetricCard 
+                title="缺货率" 
+                value={mockData.metrics.stockoutRate.value} 
+                target={mockData.metrics.stockoutRate.target}
+                change={mockData.metrics.stockoutRate.change}
+                unit="%"
+                color="primary"
+              />
+              <MetricCard 
+                title="周转天数" 
+                value={mockData.metrics.turnoverDays.value} 
+                target={mockData.metrics.turnoverDays.target}
+                change={mockData.metrics.turnoverDays.change}
+                unit=""
+                color="success"
+              />
+              <MetricCard 
+                title="建议采纳率" 
+                value={mockData.metrics.adoptionRate.value} 
+                target={mockData.metrics.adoptionRate.target}
+                change={mockData.metrics.adoptionRate.change}
+                unit="%"
+                color="success"
+              />
+              <MetricCard 
+                title="人工修正率" 
+                value={mockData.metrics.manualRate.value} 
+                target={mockData.metrics.manualRate.target}
+                change={mockData.metrics.manualRate.change}
+                unit="%"
+                color="accent"
+              />
+              <MetricCard 
+                title="调拨替代占比" 
+                value={mockData.metrics.transferRatio.value} 
+                target={mockData.metrics.transferRatio.target}
+                change={mockData.metrics.transferRatio.change}
+                unit="%"
+                color="primary"
+              />
+            </div>
+
+            {/* 趋势图区 */}
+            <div className="grid grid-cols-2 gap-6 mb-6">
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold text-gray-900">
+                    <i className="fas fa-chart-line text-danger mr-2"></i>
+                    缺货率趋势
+                  </h3>
+                  <span className="text-xs text-success">↓ 持续下降</span>
+                </div>
+                <div className="chart-container">
+                  <SimpleChart data={mockData.trendData.stockoutRate} color="#C45C4A" />
+                </div>
+              </div>
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold text-gray-900">
+                    <i className="fas fa-chart-line text-success mr-2"></i>
+                    周转天数趋势
+                  </h3>
+                  <span className="text-xs text-success">↓ 持续优化</span>
+                </div>
+                <div className="chart-container">
+                  <SimpleChart data={mockData.trendData.turnoverDays} color="#53B886" />
+                </div>
+              </div>
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold text-gray-900">
+                    <i className="fas fa-chart-line text-primary mr-2"></i>
+                    建议采纳率趋势
+                  </h3>
+                  <span className="text-xs text-success">↑ 持续提升</span>
+                </div>
+                <div className="chart-container">
+                  <SimpleChart data={mockData.trendData.adoptionRate} color="#6C9BCA" />
+                </div>
+              </div>
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold text-gray-900">
+                    <i className="fas fa-chart-line text-accent mr-2"></i>
+                    低可信库存趋势
+                  </h3>
+                  <span className="text-xs text-success">↓ 持续改善</span>
+                </div>
+                <div className="chart-container">
+                  <SimpleChart data={mockData.trendData.lowCredibility} color="#F9A633" />
+                </div>
+              </div>
+            </div>
+
+            {/* 诊断区 */}
+            <div className="grid grid-cols-12 gap-6 mb-6">
+              {/* 策略效果对比 */}
+              <div className="col-span-6 card p-5">
+                <h3 className="text-base font-semibold text-gray-900 mb-4">
+                  <i className="fas fa-balance-scale text-primary mr-2"></i>
+                  策略效果对比
+                </h3>
+                <div className="space-y-3">
+                  {mockData.strategyComparison.map((item, idx) => (
+                    <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-900">{item.name}</span>
+                        <span className={`text-xs ${item.improvement < -2 ? 'text-success' : 'text-gray-500'}`}>
+                          缺货改善 {item.improvement}%
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                        <span>采纳率: {item.adoption}%</span>
+                        <span>修正率: {item.correction}%</span>
+                      </div>
+                      <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-primary rounded-full"
+                          style={{ width: `${item.adoption}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 执行漏斗 */}
+              <div className="col-span-3 card p-5">
+                <h3 className="text-base font-semibold text-gray-900 mb-4">
+                  <i className="fas fa-filter text-primary mr-2"></i>
+                  执行漏斗
+                </h3>
+                <div className="pl-20 pr-16 py-4">
+                  {mockData.funnelData.map((item, idx) => (
+                    <div 
+                      key={idx} 
+                      className="funnel-bar"
+                      style={{ 
+                        width: `${item.rate}%`,
+                        background: `linear-gradient(90deg, #6C9BCA ${100 - idx * 15}%, #8BB3D9 ${100 - idx * 15}%)`
+                      }}
+                    >
+                      <span className="funnel-label">{item.stage}</span>
+                      <span>{item.rate}%</span>
+                      <span className="funnel-count">{item.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 可信度影响分析 */}
+              <div className="col-span-3 card p-5">
+                <h3 className="text-base font-semibold text-gray-900 mb-4">
+                  <i className="fas fa-check-circle text-accent mr-2"></i>
+                  可信度影响
+                </h3>
+                <div className="space-y-4">
+                  <div className="p-4 bg-[#E8F5EE] rounded-xl">
+                    <div className="text-sm text-gray-600">高可信库存对象</div>
+                    <div className="text-2xl font-bold text-success">92%</div>
+                    <div className="text-xs text-success mt-1">采纳率</div>
+                  </div>
+                  <div className="p-4 bg-[#FEF5E7] rounded-xl">
+                    <div className="text-sm text-gray-600">低可信库存对象</div>
+                    <div className="text-2xl font-bold text-accent">58%</div>
+                    <div className="text-xs text-accent mt-1">采纳率 ↓34%</div>
+                  </div>
+                  <div className="p-3 bg-primary-light rounded-lg text-center">
+                    <div className="text-sm text-primary font-medium">
+                      库存准确性对补货效果影响显著
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 明细榜单区 */}
+            <div className="grid grid-cols-2 gap-6">
+              {/* Top风险SKU */}
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold text-gray-900">
+                    <i className="fas fa-fire text-danger mr-2"></i>
+                    Top风险SKU
+                  </h3>
+                  <button className="text-sm text-primary hover:underline">查看全部</button>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {mockData.topRiskSKU.map((item, idx) => (
+                    <div key={idx} className="rank-item flex items-center gap-3">
+                      <span className={`rank-num ${idx < 3 ? 'top' : 'normal'}`}>{idx + 1}</span>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">{item.sku}</div>
+                        <div className="text-xs text-gray-500">{item.node} · {item.risk}</div>
+                      </div>
+                      <span className={`text-xs ${item.trend === '上升' ? 'text-danger' : item.trend === '下降' ? 'text-success' : 'text-gray-500'}`}>
+                        {item.trend}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Top低效策略 */}
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold text-gray-900">
+                    <i className="fas fa-exclamation-triangle text-warning mr-2"></i>
+                    Top低效策略
+                  </h3>
+                  <button className="text-sm text-primary hover:underline">查看全部</button>
+                </div>
+                <div className="space-y-3">
+                  {mockData.lowEfficiencyStrategy.map((item, idx) => (
+                    <div key={idx} className="p-3 bg-[#FEF5E7] rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-900">{item.name}</span>
+                        <button className="text-xs text-primary hover:underline">去调整</button>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                        <span>采纳率: <span className="text-accent font-medium">{item.adoption}%</span></span>
+                        <span>修正率: <span className="text-accent font-medium">{item.correction}%</span></span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Top未采纳建议 */}
+                <h4 className="text-sm font-medium text-gray-900 mt-5 mb-3">Top未采纳建议</h4>
+                <div className="space-y-2">
+                  {mockData.topUnadopted.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                      <div>
+                        <div className="text-sm text-gray-900">{item.id}</div>
+                        <div className="text-xs text-gray-500">{item.reason}</div>
+                      </div>
+                      <span className="text-xs text-gray-400">{item.strategy}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

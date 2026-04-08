@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>预警中心 - P06</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#6C9BCA',
+            'primary-hover': '#5A8AB9',
+            'primary-light': '#E8F1F8',
+            accent: '#F9A633',
+            'accent-hover': '#E09520',
+            success: '#53B886',
+            warning: '#F9A633',
+            danger: '#C45C4A',
+            info: '#6C9BCA',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: linear-gradient(180deg, #f8fafc 0%, #f0f7fc 100%);
+      min-height: 100vh;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+    }
+    .stat-card {
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+    }
+    .tab-item {
+      padding: 10px 16px;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .tab-item:hover {
+      color: #6C9BCA;
+    }
+    .tab-item.active {
+      color: #6C9BCA;
+      border-bottom-color: #6C9BCA;
+      font-weight: 500;
+    }
+    .alert-type-tag {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .type-credibility {
+      background: #FEF5E7;
+      color: #C17A28;
+    }
+    .type-delivery {
+      background: #FCE8E5;
+      color: #C45C4A;
+    }
+    .type-sales {
+      background: #E8F1F8;
+      color: #6C9BCA;
+    }
+    .type-execution {
+      background: #E8F5EE;
+      color: #53B886;
+    }
+    .priority-high {
+      background: #FCE8E5;
+      color: #C45C4A;
+    }
+    .priority-medium {
+      background: #FEF5E7;
+      color: #C17A28;
+    }
+    .priority-low {
+      background: #E8F5EE;
+      color: #53B886;
+    }
+    .status-pending {
+      background: #FEF5E7;
+      color: #C17A28;
+    }
+    .status-processing {
+      background: #E8F1F8;
+      color: #6C9BCA;
+    }
+    .status-upgraded {
+      background: #FCE8E5;
+      color: #C45C4A;
+    }
+    .status-closed {
+      background: #E8F5EE;
+      color: #53B886;
+    }
+    .table-row {
+      transition: background 0.15s;
+    }
+    .table-row:hover {
+      background: #F9FAFB;
+    }
+    .drawer {
+      position: fixed;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 420px;
+      background: white;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+      z-index: 100;
+      transform: translateX(100%);
+      transition: transform 0.3s;
+    }
+    .drawer.open {
+      transform: translateX(0);
+    }
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.3);
+      z-index: 99;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .timeline-item {
+      position: relative;
+      padding-left: 24px;
+      padding-bottom: 16px;
+    }
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: 6px;
+      top: 6px;
+      bottom: 0;
+      width: 2px;
+      background: #E5E7EB;
+    }
+    .timeline-item::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 6px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #6C9BCA;
+      border: 2px solid white;
+      box-shadow: 0 0 0 2px #6C9BCA;
+    }
+    .timeline-item:last-child::before {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    // Mock数据
+    const mockData = {
+      stats: {
+        todayNew: 32,
+        pending: 18,
+        highPriority: 7,
+        lowCredibility: 5,
+        deliveryException: 6,
+      },
+      tabs: [
+        { key: 'all', label: '全部', count: 50 },
+        { key: 'pending', label: '待处理', count: 18 },
+        { key: 'highPriority', label: '高优先级', count: 7 },
+        { key: 'credibility', label: '低可信库存', count: 5 },
+        { key: 'delivery', label: '交期异常', count: 6 },
+        { key: 'sales', label: '销量异常', count: 8 },
+        { key: 'execution', label: '执行异常', count: 9 },
+      ],
+      alerts: [
+        {
+          id: 'ALT-20260408-001',
+          type: 'credibility',
+          typeLabel: '低可信库存',
+          priority: 'high',
+          source: 'SG-20260408-001',
+          sourceType: '建议',
+          node: '兰州一区门店A',
+          status: 'pending',
+          handler: '-',
+          updatedAt: '2026-04-08 14:20',
+          summary: '该门店可乐500ml近期盘点差异超过阈值，库存可信度下降',
+          impact: '可能导致补货建议不准确，建议先完成库存校准',
+          action: '跳转库存校准入口进行盘点复核',
+        },
+        {
+          id: 'ALT-20260408-002',
+          type: 'delivery',
+          typeLabel: '交期异常',
+          priority: 'high',
+          source: 'SG-20260408-002',
+          sourceType: '建议',
+          node: '兰州一区门店B',
+          status: 'processing',
+          handler: '张计划',
+          updatedAt: '2026-04-08 13:15',
+          summary: '供应商反馈原定于4月8日到货的采购单将延迟2天',
+          impact: '原定补货计划失效，需重新计算建议或寻找替代供给',
+          action: '确认延迟后重新触发建议计算',
+        },
+        {
+          id: 'ALT-20260408-003',
+          type: 'sales',
+          typeLabel: '销量异常',
+          priority: 'medium',
+          source: 'SKU-003',
+          sourceType: 'SKU',
+          node: '兰州二区门店C',
+          status: 'pending',
+          handler: '-',
+          updatedAt: '2026-04-08 11:30',
+          summary: '芬达500ml近3天日均销量较上周同期增长180%',
+          impact: '当前建议量可能不足以覆盖实际需求',
+          action: '建议人工复核并调整建议量',
+        },
+        {
+          id: 'ALT-20260408-004',
+          type: 'execution',
+          typeLabel: '执行异常',
+          priority: 'medium',
+          source: 'EX-20260407-015',
+          sourceType: '执行单',
+          node: '西宁区域仓',
+          status: 'upgraded',
+          handler: '李主管',
+          updatedAt: '2026-04-08 10:00',
+          summary: '调拨单回写失败，目标仓未收到入库确认',
+          impact: '系统库存与实际库存存在差异',
+          action: '联系仓内主管确认实际入库情况',
+        },
+        {
+          id: 'ALT-20260408-005',
+          type: 'credibility',
+          typeLabel: '低可信库存',
+          priority: 'medium',
+          source: 'SG-20260408-005',
+          sourceType: '建议',
+          node: '兰州一区门店D',
+          status: 'closed',
+          handler: '王计划',
+          updatedAt: '2026-04-08 09:00',
+          summary: '库存调整频繁，可信度评估为低',
+          impact: '已完成盘点校准，库存已恢复可信',
+          action: '已完成库存校准，预警关闭',
+        },
+      ]
+    };
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('all');
+      const [selectedRows, setSelectedRows] = useState([]);
+      const [drawerOpen, setDrawerOpen] = useState(false);
+      const [selectedItem, setSelectedItem] = useState(null);
+
+      const toggleRow = (id) => {
+        if (selectedRows.includes(id)) {
+          setSelectedRows(selectedRows.filter(row => row !== id));
+        } else {
+          setSelectedRows([...selectedRows, id]);
+        }
+      };
+
+      const openDrawer = (item) => {
+        setSelectedItem(item);
+        setDrawerOpen(true);
+      };
+
+      const getStatusText = (status) => {
+        const map = {
+          pending: '待处理',
+          processing: '处理中',
+          upgraded: '已升级',
+          closed: '已关闭',
+        };
+        return map[status] || status;
+      };
+
+      return (
+        <div className="min-h-screen pb-8">
+          {/* 顶部信息区 */}
+          <div className="bg-white border-b border-gray-200 sticky top-0 z-50">
+            <div className="max-w-[1600px] mx-auto px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center">
+                    <i className="fas fa-bell text-white"></i>
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-semibold text-gray-900">预警中心</h1>
+                    <p className="text-sm text-gray-500">异常闭环处理中心</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                    <i className="fas fa-sync-alt mr-2"></i>刷新
+                  </button>
+                  <button className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                    <i className="fas fa-download mr-2"></i>导出
+                  </button>
+                </div>
+              </div>
+
+              {/* 统计卡片区 */}
+              <div className="grid grid-cols-5 gap-4 mt-4">
+                <div className="stat-card card p-4 text-center">
+                  <div className="text-2xl font-bold text-gray-900">{mockData.stats.todayNew}</div>
+                  <div className="text-xs text-gray-500 mt-1">今日新增预警</div>
+                </div>
+                <div className="stat-card card p-4 text-center border-l-4 border-warning">
+                  <div className="text-2xl font-bold text-warning">{mockData.stats.pending}</div>
+                  <div className="text-xs text-gray-500 mt-1">待处理</div>
+                </div>
+                <div className="stat-card card p-4 text-center border-l-4 border-danger">
+                  <div className="text-2xl font-bold text-danger">{mockData.stats.highPriority}</div>
+                  <div className="text-xs text-gray-500 mt-1">高优先级</div>
+                </div>
+                <div className="stat-card card p-4 text-center border-l-4 border-accent">
+                  <div className="text-2xl font-bold text-accent">{mockData.stats.lowCredibility}</div>
+                  <div className="text-xs text-gray-500 mt-1">低可信库存</div>
+                </div>
+                <div className="stat-card card p-4 text-center border-l-4 border-danger">
+                  <div className="text-2xl font-bold text-danger">{mockData.stats.deliveryException}</div>
+                  <div className="text-xs text-gray-500 mt-1">交期异常</div>
+                </div>
+              </div>
+
+              {/* Tab导航 */}
+              <div className="flex items-center gap-1 mt-4 border-b border-gray-200 overflow-x-auto">
+                {mockData.tabs.map(tab => (
+                  <div 
+                    key={tab.key}
+                    className={`tab-item ${activeTab === tab.key ? 'active' : 'text-gray-600'}`}
+                    onClick={() => setActiveTab(tab.key)}
+                  >
+                    {tab.label}
+                    <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs ${activeTab === tab.key ? 'bg-primary-light text-primary' : 'bg-gray-100 text-gray-500'}`}>
+                      {tab.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* 筛选区 */}
+              <div className="flex items-center gap-4 mt-4 py-3 border-t border-gray-100">
+                <select className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary">
+                  <option>全部区域仓</option>
+                  <option>兰州一区区域仓</option>
+                  <option>兰州二区区域仓</option>
+                  <option>西宁区域仓</option>
+                </select>
+                <select className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary">
+                  <option>全部异常类型</option>
+                  <option>低可信库存</option>
+                  <option>交期异常</option>
+                  <option>销量异常</option>
+                  <option>执行异常</option>
+                </select>
+                <select className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary">
+                  <option>全部优先级</option>
+                  <option>高优先级</option>
+                  <option>中优先级</option>
+                  <option>低优先级</option>
+                </select>
+                <select className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary">
+                  <option>全部状态</option>
+                  <option>待处理</option>
+                  <option>处理中</option>
+                  <option>已升级</option>
+                  <option>已关闭</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* 主内容区 */}
+          <div className="max-w-[1600px] mx-auto px-6 py-6">
+            {/* 列表区 */}
+            <div className="card overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left">
+                      <input type="checkbox" className="rounded border-gray-300" />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">预警单号</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">异常类型</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">优先级</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">来源对象</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">当前状态</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">责任人</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">最近更新</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {mockData.alerts.map(item => (
+                    <tr key={item.id} className="table-row">
+                      <td className="px-4 py-3">
+                        <input 
+                          type="checkbox" 
+                          className="rounded border-gray-300"
+                          checked={selectedRows.includes(item.id)}
+                          onChange={() => toggleRow(item.id)}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.id}</td>
+                      <td className="px-4 py-3">
+                        <span className={`alert-type-tag type-${item.type}`}>
+                          {item.typeLabel}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`alert-type-tag priority-${item.priority}`}>
+                          {item.priority === 'high' ? '高' : item.priority === 'medium' ? '中' : '低'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm text-gray-900">{item.source}</div>
+                        <div className="text-xs text-gray-500">{item.node}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`alert-type-tag status-${item.status}`}>
+                          {getStatusText(item.status)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{item.handler}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{item.updatedAt}</td>
+                      <td className="px-4 py-3">
+                        <button 
+                          className="text-xs text-primary hover:underline"
+                          onClick={() => openDrawer(item)}
+                        >
+                          处理
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 分页 */}
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-gray-500">
+                共 50 条，每页 20 条
+              </div>
+              <div className="flex items-center gap-2">
+                <button className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  上一页
+                </button>
+                <button className="px-3 py-1.5 text-sm text-white bg-primary rounded-lg">1</button>
+                <button className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">2</button>
+                <button className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">3</button>
+                <button className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  下一页
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 底部批量操作栏 */}
+          {selectedRows.length > 0 && (
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-4 z-50">
+              <div className="max-w-[1600px] mx-auto flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-600">
+                    已选 <span className="font-semibold text-primary">{selectedRows.length}</span> 条
+                  </span>
+                  <button className="text-sm text-gray-500 hover:text-gray-700" onClick={() => setSelectedRows([])}>
+                    取消选择
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button className="px-4 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary-hover">
+                    批量认领
+                  </button>
+                  <button className="px-4 py-2 text-sm text-white bg-accent rounded-lg hover:bg-accent-hover">
+                    批量升级
+                  </button>
+                  <button className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                    批量关闭
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 遮罩层 */}
+          <div className={`backdrop ${drawerOpen ? 'open' : ''}`} onClick={() => setDrawerOpen(false)}></div>
+
+          {/* 右侧处理抽屉 */}
+          <div className={`drawer ${drawerOpen ? 'open' : ''}`}>
+            {selectedItem && (
+              <div className="h-full flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">预警处理</h3>
+                    <p className="text-xs text-gray-500 mt-1">{selectedItem.id}</p>
+                  </div>
+                  <button onClick={() => setDrawerOpen(false)} className="text-gray-400 hover:text-gray-600">
+                    <i className="fas fa-times"></i>
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-auto p-4">
+                  <div className="space-y-5">
+                    {/* 异常摘要 */}
+                    <div className="p-4 bg-[#FEF5E7] rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`alert-type-tag type-${selectedItem.type}`}>{selectedItem.typeLabel}</span>
+                        <span className={`alert-type-tag priority-${selectedItem.priority}`}>
+                          {selectedItem.priority === 'high' ? '高优先级' : '中优先级'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700">{selectedItem.summary}</p>
+                    </div>
+
+                    {/* 来源对象 */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 mb-3">来源对象</h4>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{selectedItem.source}</div>
+                            <div className="text-xs text-gray-500">{selectedItem.sourceType} · {selectedItem.node}</div>
+                          </div>
+                          <button className="text-xs text-primary hover:underline">跳转</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 影响说明 */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 mb-3">影响说明</h4>
+                      <p className="text-sm text-gray-600 p-3 bg-gray-50 rounded-lg">
+                        {selectedItem.impact}
+                      </p>
+                    </div>
+
+                    {/* 建议动作 */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 mb-3">建议动作</h4>
+                      <p className="text-sm text-primary p-3 bg-primary-light rounded-lg">
+                        {selectedItem.action}
+                      </p>
+                    </div>
+
+                    {/* 处理记录 */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 mb-3">处理记录</h4>
+                      <div className="space-y-0">
+                        <div className="timeline-item">
+                          <div className="text-xs text-gray-500">2026-04-08 14:20</div>
+                          <div className="text-sm text-gray-900">预警生成</div>
+                          <div className="text-xs text-gray-500">系统自动检测到异常</div>
+                        </div>
+                        {selectedItem.status !== 'pending' && (
+                          <div className="timeline-item">
+                            <div className="text-xs text-gray-500">{selectedItem.updatedAt}</div>
+                            <div className="text-sm text-gray-900">
+                              {selectedItem.status === 'processing' ? '开始处理' : selectedItem.status === 'upgraded' ? '升级处理' : '已关闭'}
+                            </div>
+                            <div className="text-xs text-gray-500">{selectedItem.handler}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 border-t border-gray-200 space-y-2">
+                  {selectedItem.status === 'pending' ? (
+                    <>
+                      <button className="w-full py-2.5 text-sm text-white bg-primary rounded-lg hover:bg-primary-hover">
+                        认领处理
+                      </button>
+                      <div className="flex gap-2">
+                        <button className="flex-1 py-2 text-sm text-white bg-accent rounded-lg hover:bg-accent-hover">
+                          升级
+                        </button>
+                        <button className="flex-1 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                          关闭
+                        </button>
+                      </div>
+                    </>
+                  ) : selectedItem.status === 'processing' ? (
+                    <>
+                      <button className="w-full py-2.5 text-sm text-white bg-success rounded-lg hover:opacity-90">
+                        标记完成
+                      </button>
+                      <button className="w-full py-2 text-sm text-white bg-accent rounded-lg hover:bg-accent-hover">
+                        升级
+                      </button>
+                    </>
+                  ) : (
+                    <button className="w-full py-2.5 text-sm text-gray-600 bg-gray-100 rounded-lg" disabled>
+                      已{selectedItem.status === 'upgraded' ? '升级' : '关闭'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

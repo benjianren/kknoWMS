@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>补货工作台 - P01</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#6C9BCA',
+            'primary-hover': '#5A8AB9',
+            'primary-light': '#E8F1F8',
+            accent: '#F9A633',
+            'accent-hover': '#E09520',
+            success: '#53B886',
+            warning: '#F9A633',
+            danger: '#C45C4A',
+            info: '#6C9BCA',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: linear-gradient(180deg, #f8fafc 0%, #f0f7fc 100%);
+      min-height: 100vh;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+    }
+    .todo-card {
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .todo-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+    }
+    .todo-card.alert {
+      border-left: 4px solid #F9A633;
+    }
+    .todo-card.danger {
+      border-left: 4px solid #C45C4A;
+    }
+    .metric-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: #1F2937;
+    }
+    .metric-change {
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
+    .metric-change.up {
+      background: #E8F5EE;
+      color: #53B886;
+    }
+    .metric-change.down {
+      background: #FCE8E5;
+      color: #C45C4A;
+    }
+    .list-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid #F3F4F6;
+      transition: background 0.15s;
+    }
+    .list-item:hover {
+      background: #F9FAFB;
+    }
+    .list-item:last-child {
+      border-bottom: none;
+    }
+    .risk-badge {
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .risk-high {
+      background: #FCE8E5;
+      color: #C45C4A;
+    }
+    .risk-medium {
+      background: #FEF5E7;
+      color: #C17A28;
+    }
+    .risk-low {
+      background: #E8F5EE;
+      color: #53B886;
+    }
+    .shortcut-card {
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .shortcut-card:hover {
+      background: #F0F7FC;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    // Mock数据
+    const mockData = {
+      todos: {
+        pendingConfirm: 23,
+        highRisk: 7,
+        lowCredibility: 5,
+        deliveryException: 3,
+        pendingWriteback: 12,
+      },
+      priorityList: [
+        { id: 1, sku: 'SKU-001 可乐500ml', node: '兰州一区门店A', risk: 'high', reason: '库存极低且低可信', time: '2小时前' },
+        { id: 2, sku: 'SKU-002 雪碧500ml', node: '兰州一区门店B', risk: 'high', reason: '交期延迟', time: '3小时前' },
+        { id: 3, sku: 'SKU-003 芬达500ml', node: '兰州二区门店C', risk: 'medium', reason: '活动影响销量突增', time: '4小时前' },
+        { id: 4, sku: 'SKU-004 脉动600ml', node: '西宁区域仓', risk: 'medium', reason: '调拨失败待重试', time: '5小时前' },
+        { id: 5, sku: 'SKU-005 美年达500ml', node: '兰州一区门店D', risk: 'low', reason: '建议待确认', time: '6小时前' },
+      ],
+      lowCredibilityList: [
+        { id: 1, node: '兰州一区门店A', count: 8, lastCheck: '2026-04-07', reason: '盘点差异大' },
+        { id: 2, node: '兰州二区门店C', count: 5, lastCheck: '2026-04-06', reason: '近期调整频繁' },
+        { id: 3, node: '西宁区域仓', count: 3, lastCheck: '2026-04-08', reason: '在途差异' },
+      ],
+      exceptionList: [
+        { id: 1, type: '调拨失败', node: '兰州一区门店A', sku: 'SKU-001', status: '待处理' },
+        { id: 2, type: '采购延迟', node: '兰州二区门店C', sku: 'SKU-002', status: '跟进中' },
+        { id: 3, type: '回写失败', node: '西宁区域仓', sku: 'SKU-004', status: '待重试' },
+      ],
+      trends: {
+        labels: ['04-01', '04-02', '04-03', '04-04', '04-05', '04-06', '04-07'],
+        stockoutRate: [5.2, 4.8, 4.5, 4.2, 3.8, 3.5, 3.2],
+        adoptionRate: [72, 74, 75, 78, 80, 82, 85],
+      }
+    };
+
+    function App() {
+      const [filters, setFilters] = useState({
+        warehouse: '兰州一区区域仓',
+        category: '全部品类',
+        timeRange: '今日',
+      });
+
+      // 待办卡片组件
+      const TodoCard = ({ title, count, change, changeType, icon, color, alert }) => (
+        <div className={`todo-card card p-5 ${alert || ''}`}>
+          <div className="flex items-start justify-between">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
+              <i className={`fas ${icon} text-white`}></i>
+            </div>
+            <span className={`metric-change ${changeType}`}>{change}</span>
+          </div>
+          <div className="mt-4">
+            <div className="metric-value">{count}</div>
+            <div className="text-sm text-gray-500 mt-1">{title}</div>
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="min-h-screen pb-8">
+          {/* 顶部信息区 */}
+          <div className="bg-white border-b border-gray-200 sticky top-0 z-50">
+            <div className="max-w-[1600px] mx-auto px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+                    <i className="fas fa-desktop text-white"></i>
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-semibold text-gray-900">补货工作台</h1>
+                    <p className="text-sm text-gray-500">数据更新至 2026-04-08 14:30</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                    <i className="fas fa-sync-alt mr-2"></i>刷新
+                  </button>
+                  <button className="px-4 py-2 text-sm text-primary bg-primary-light rounded-lg hover:bg-[#D6E5F2]">
+                    <i className="fas fa-bookmark mr-2"></i>保存视图
+                  </button>
+                </div>
+              </div>
+              
+              {/* 筛选区 */}
+              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">区域仓:</span>
+                  <select 
+                    className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary"
+                    value={filters.warehouse}
+                    onChange={(e) => setFilters({...filters, warehouse: e.target.value})}
+                  >
+                    <option>兰州一区区域仓</option>
+                    <option>兰州二区区域仓</option>
+                    <option>西宁区域仓</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">品类:</span>
+                  <select 
+                    className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary"
+                    value={filters.category}
+                    onChange={(e) => setFilters({...filters, category: e.target.value})}
+                  >
+                    <option>全部品类</option>
+                    <option>碳酸饮料</option>
+                    <option>果汁饮料</option>
+                    <option>茶饮料</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">时间范围:</span>
+                  <select 
+                    className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary"
+                    value={filters.timeRange}
+                    onChange={(e) => setFilters({...filters, timeRange: e.target.value})}
+                  >
+                    <option>今日</option>
+                    <option>近7天</option>
+                    <option>近30天</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 主内容区 */}
+          <div className="max-w-[1600px] mx-auto px-6 py-6">
+            {/* 关键待办卡片 */}
+            <div className="grid grid-cols-5 gap-4 mb-6">
+              <TodoCard 
+                title="待确认建议" 
+                count={mockData.todos.pendingConfirm} 
+                change="+5 较昨日" 
+                changeType="up"
+                icon="fa-clipboard-check" 
+                color="bg-primary"
+              />
+              <TodoCard 
+                title="高风险建议" 
+                count={mockData.todos.highRisk} 
+                change="+2 较昨日" 
+                changeType="down"
+                icon="fa-exclamation-triangle" 
+                color="bg-danger"
+              />
+              <TodoCard 
+                title="低可信库存" 
+                count={mockData.todos.lowCredibility} 
+                change="-1 较昨日" 
+                changeType="up"
+                icon="fa-question-circle" 
+                color="bg-accent"
+                alert="alert"
+              />
+              <TodoCard 
+                title="交期异常" 
+                count={mockData.todos.deliveryException} 
+                change="持平" 
+                changeType="up"
+                icon="fa-shipping-fast" 
+                color="bg-warning"
+                alert="danger"
+              />
+              <TodoCard 
+                title="待执行回写" 
+                count={mockData.todos.pendingWriteback} 
+                change="+3 较昨日" 
+                changeType="down"
+                icon="fa-sync" 
+                color="bg-success"
+              />
+            </div>
+
+            <div className="grid grid-cols-12 gap-6">
+              {/* 左侧风险榜单 */}
+              <div className="col-span-8 space-y-6">
+                {/* 今日优先处理对象 */}
+                <div className="card p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-semibold text-gray-900">
+                      <i className="fas fa-fire text-danger mr-2"></i>
+                      今日优先处理对象
+                    </h3>
+                    <button className="text-sm text-primary hover:underline">查看全部</button>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {mockData.priorityList.map(item => (
+                      <div key={item.id} className="list-item flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className={`risk-badge risk-${item.risk}`}>
+                            {item.risk === 'high' ? '高风险' : item.risk === 'medium' ? '中风险' : '低风险'}
+                          </span>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{item.sku}</div>
+                            <div className="text-xs text-gray-500">{item.node} · {item.reason}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-400">{item.time}</span>
+                          <button className="text-xs text-primary hover:underline">处理</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 双列：低可信库存 + 执行异常 */}
+                <div className="grid grid-cols-2 gap-6">
+                  {/* Top低可信库存对象 */}
+                  <div className="card p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-base font-semibold text-gray-900">
+                        <i className="fas fa-question-circle text-accent mr-2"></i>
+                        Top低可信库存对象
+                      </h3>
+                      <button className="text-sm text-primary hover:underline">全部</button>
+                    </div>
+                    <div className="space-y-3">
+                      {mockData.lowCredibilityList.map(item => (
+                        <div key={item.id} className="flex items-center justify-between p-3 bg-[#FEF5E7] rounded-lg">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{item.node}</div>
+                            <div className="text-xs text-gray-500">{item.reason}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-lg font-bold text-accent">{item.count}</div>
+                            <div className="text-xs text-gray-500">个SKU</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Top执行异常对象 */}
+                  <div className="card p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-base font-semibold text-gray-900">
+                        <i className="fas fa-times-circle text-danger mr-2"></i>
+                        Top执行异常对象
+                      </h3>
+                      <button className="text-sm text-primary hover:underline">全部</button>
+                    </div>
+                    <div className="space-y-3">
+                      {mockData.exceptionList.map(item => (
+                        <div key={item.id} className="flex items-center justify-between p-3 bg-[#FCE8E5] rounded-lg">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{item.type}</div>
+                            <div className="text-xs text-gray-500">{item.node} · {item.sku}</div>
+                          </div>
+                          <span className="text-xs px-2 py-1 bg-danger text-white rounded">{item.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 趋势摘要 */}
+                <div className="card p-5">
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">
+                    <i className="fas fa-chart-line text-primary mr-2"></i>
+                    近7天趋势摘要
+                  </h3>
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="text-center p-4 bg-primary-light rounded-xl">
+                      <div className="text-2xl font-bold text-primary">3.2%</div>
+                      <div className="text-sm text-gray-600 mt-1">缺货率</div>
+                      <div className="text-xs text-success mt-1">↓ 2.0% 环比</div>
+                    </div>
+                    <div className="text-center p-4 bg-[#E8F5EE] rounded-xl">
+                      <div className="text-2xl font-bold text-success">85%</div>
+                      <div className="text-sm text-gray-600 mt-1">采纳率</div>
+                      <div className="text-xs text-success mt-1">↑ 5% 环比</div>
+                    </div>
+                    <div className="text-center p-4 bg-[#FEF5E7] rounded-xl">
+                      <div className="text-2xl font-bold text-accent">5</div>
+                      <div className="text-sm text-gray-600 mt-1">低可信库存数</div>
+                      <div className="text-xs text-success mt-1">↓ 3 环比</div>
+                    </div>
+                    <div className="text-center p-4 bg-primary-light rounded-xl">
+                      <div className="text-2xl font-bold text-primary">78%</div>
+                      <div className="text-sm text-gray-600 mt-1">待办处理完成率</div>
+                      <div className="text-xs text-success mt-1">↑ 8% 环比</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 右侧快捷入口 */}
+              <div className="col-span-4">
+                <div className="card p-5">
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">快捷入口</h3>
+                  <div className="space-y-3">
+                    <div className="shortcut-card flex items-center gap-4 p-4 border border-gray-100 rounded-xl">
+                      <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center">
+                        <i className="fas fa-list text-white text-lg"></i>
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">补货建议池</div>
+                        <div className="text-xs text-gray-500">待处理 23 条</div>
+                      </div>
+                      <i className="fas fa-chevron-right text-gray-400"></i>
+                    </div>
+                    <div className="shortcut-card flex items-center gap-4 p-4 border border-gray-100 rounded-xl">
+                      <div className="w-12 h-12 rounded-xl bg-accent flex items-center justify-center">
+                        <i className="fas fa-bell text-white text-lg"></i>
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">预警中心</div>
+                        <div className="text-xs text-gray-500">待处理 8 条</div>
+                      </div>
+                      <i className="fas fa-chevron-right text-gray-400"></i>
+                    </div>
+                    <div className="shortcut-card flex items-center gap-4 p-4 border border-gray-100 rounded-xl">
+                      <div className="w-12 h-12 rounded-xl bg-success flex items-center justify-center">
+                        <i className="fas fa-tasks text-white text-lg"></i>
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">执行跟踪中心</div>
+                        <div className="text-xs text-gray-500">进行中 12 条</div>
+                      </div>
+                      <i className="fas fa-chevron-right text-gray-400"></i>
+                    </div>
+                    <div className="shortcut-card flex items-center gap-4 p-4 border border-gray-100 rounded-xl">
+                      <div className="w-12 h-12 rounded-xl bg-[#8B9DC3] flex items-center justify-center">
+                        <i className="fas fa-chart-bar text-white text-lg"></i>
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">数据分析看板</div>
+                        <div className="text-xs text-gray-500">查看整体效果</div>
+                      </div>
+                      <i className="fas fa-chevron-right text-gray-400"></i>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 策略摘要 */}
+                <div className="card p-5 mt-4">
+                  <h3 className="text-base font-semibold text-gray-900 mb-4">策略覆盖摘要</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-600">生效策略</span>
+                        <span className="text-sm font-medium text-gray-900">12 条</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full w-[85%] bg-primary rounded-full"></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-600">覆盖SKU</span>
+                        <span className="text-sm font-medium text-gray-900">156 个</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full w-[72%] bg-success rounded-full"></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-600">覆盖节点</span>
+                        <span className="text-sm font-medium text-gray-900">28 个</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full w-[60%] bg-accent rounded-full"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
